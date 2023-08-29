@@ -11,13 +11,11 @@ class ReferralCode(Document):
     def autoname(self):
         if not self.referral_name:
             self.referral_name = (
-                strip(self.customer) + "-" + frappe.generate_hash()[:5].upper()
+                f"{strip(self.customer)}-{frappe.generate_hash()[:5].upper()}"
             )
-            self.name = self.referral_name
         else:
             self.referral_name = strip(self.referral_name)
-            self.name = self.referral_name
-
+        self.name = self.referral_name
         if not self.referral_code:
             self.referral_code = frappe.generate_hash()[:10].upper()
 

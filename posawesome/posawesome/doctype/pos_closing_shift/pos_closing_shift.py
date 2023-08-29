@@ -12,7 +12,7 @@ from frappe.utils import flt
 
 class POSClosingShift(Document):
     def validate(self):
-        user = frappe.get_all(
+        if user := frappe.get_all(
             "POS Closing Shift",
             filters={
                 "user": self.user,
@@ -20,14 +20,10 @@ class POSClosingShift(Document):
                 "pos_opening_shift": self.pos_opening_shift,
                 "name": ["!=", self.name],
             },
-        )
-
-        if user:
+        ):
             frappe.throw(
                 _(
-                    "POS Closing Shift {} against {} between selected period".format(
-                        frappe.bold("already exists"), frappe.bold(self.user)
-                    )
+                    f'POS Closing Shift {frappe.bold("already exists")} against {frappe.bold(self.user)} between selected period'
                 ),
                 title=_("Invalid Period"),
             )
@@ -153,19 +149,17 @@ def make_closing_shift_from_opening(opening_shift):
 
     pos_transactions = []
     taxes = []
-    payments = []
     pos_payments_table = []
-    for detail in opening_shift.get("balance_details"):
-        payments.append(
-            frappe._dict(
-                {
-                    "mode_of_payment": detail.get("mode_of_payment"),
-                    "opening_amount": detail.get("amount") or 0,
-                    "expected_amount": detail.get("amount") or 0,
-                }
-            )
+    payments = [
+        frappe._dict(
+            {
+                "mode_of_payment": detail.get("mode_of_payment"),
+                "opening_amount": detail.get("amount") or 0,
+                "expected_amount": detail.get("amount") or 0,
+            }
         )
-
+        for detail in opening_shift.get("balance_details")
+    ]
     for d in invoices:
         pos_transactions.append(
             frappe._dict(
@@ -182,12 +176,11 @@ def make_closing_shift_from_opening(opening_shift):
         closing_shift.total_quantity += flt(d.total_qty)
 
         for t in d.taxes:
-            existing_tax = [
+            if existing_tax := [
                 tx
                 for tx in taxes
                 if tx.account_head == t.account_head and tx.rate == t.rate
-            ]
-            if existing_tax:
+            ]:
                 existing_tax[0].amount += flt(t.tax_amount)
             else:
                 taxes.append(
@@ -201,10 +194,11 @@ def make_closing_shift_from_opening(opening_shift):
                 )
 
         for p in d.payments:
-            existing_pay = [
-                pay for pay in payments if pay.mode_of_payment == p.mode_of_payment
-            ]
-            if existing_pay:
+            if existing_pay := [
+                pay
+                for pay in payments
+                if pay.mode_of_payment == p.mode_of_payment
+            ]:
                 cash_mode_of_payment = frappe.get_value(
                     "POS Profile",
                     opening_shift.get("pos_profile"),
@@ -242,10 +236,11 @@ def make_closing_shift_from_opening(opening_shift):
                 }
             )
         )
-        existing_pay = [
-            pay for pay in payments if pay.mode_of_payment == py.mode_of_payment
-        ]
-        if existing_pay:
+        if existing_pay := [
+            pay
+            for pay in payments
+            if pay.mode_of_payment == py.mode_of_payment
+        ]:
             existing_pay[0].expected_amount += flt(py.paid_amount)
         else:
             payments.append(

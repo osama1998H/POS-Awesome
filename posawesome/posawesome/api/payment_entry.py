@@ -67,7 +67,7 @@ def create_payment_entry(
     pe.letter_head = frappe.get_value("Company", company, "default_letter_head")
     pe.reference_date = reference_date
     pe.reference_no = reference_no
-    if pe.party_type in ["Customer", "Supplier"]:
+    if pe.party_type in {"Customer", "Supplier"}:
         bank_account = get_party_bank_account(pe.party_type, pe.party)
         pe.set("bank_account", bank_account)
         pe.set_bank_account_data()
@@ -109,19 +109,10 @@ def set_paid_amount_and_received_amount(
         paid_amount = received_amount = abs(outstanding_amount)
     elif payment_type == "Receive":
         paid_amount = abs(outstanding_amount)
-        if bank_amount:
-            received_amount = bank_amount
-        else:
-            received_amount = paid_amount * conversion_rate
-
+        received_amount = bank_amount if bank_amount else paid_amount * conversion_rate
     else:
         received_amount = abs(outstanding_amount)
-        if bank_amount:
-            paid_amount = bank_amount
-        else:
-            # if party account currency and bank currency is different then populate paid amount as well
-            paid_amount = received_amount * conversion_rate
-
+        paid_amount = bank_amount if bank_amount else received_amount * conversion_rate
     return paid_amount, received_amount
 
 
@@ -135,10 +126,10 @@ def get_outstanding_invoices(company, currency, customer=None, pos_profile_name=
         "currency": currency,
     }
     if customer:
-        filters.update({"customer": customer})
+        filters["customer"] = customer
     if pos_profile_name:
-        filters.update({"pos_profile": pos_profile_name})
-    invoices = frappe.get_all(
+        filters["pos_profile"] = pos_profile_name
+    return frappe.get_all(
         "Sales Invoice",
         filters=filters,
         fields=[
@@ -154,7 +145,6 @@ def get_outstanding_invoices(company, currency, customer=None, pos_profile_name=
         ],
         order_by="due_date asc",
     )
-    return invoices
 
 
 @frappe.whitelist()
@@ -169,8 +159,8 @@ def get_unallocated_payments(customer, company, currency, mode_of_payment=None):
         "paid_from_account_currency": currency,
     }
     if mode_of_payment:
-        filters.update({"mode_of_payment": mode_of_payment})
-    unallocated_payment = frappe.get_all(
+        filters["mode_of_payment"] = mode_of_payment
+    return frappe.get_all(
         "Payment Entry",
         filters=filters,
         fields=[
@@ -185,7 +175,6 @@ def get_unallocated_payments(customer, company, currency, mode_of_payment=None):
         ],
         order_by="posting_date asc",
     )
-    return unallocated_payment
 
 
 @frappe.whitelist()
@@ -273,10 +262,8 @@ def process_pos_payment(payload):
             and data.total_selected_payments > 0
         ):
             # add the unallocated payments to the all payments entry
-            for selected_payment in data.selected_payments:
-                all_payments_entry.append(selected_payment)
-
-        if len(all_payments_entry) > 0:
+            all_payments_entry.extend(iter(data.selected_payments))
+        if all_payments_entry:
             # sort the all payments entry by posting date
             all_payments_entry = sorted(
                 all_payments_entry,
@@ -330,7 +317,7 @@ def process_pos_payment(payload):
 
     # then show the results
     msg = ""
-    if len(new_payments_entry) > 0:
+    if new_payments_entry:
         msg += "<h4>New Payments</h4>"
         msg += "<table class='table table-bordered'>"
         msg += "<thead><tr><th>Payment Entry</th><th>Amount</th></tr></thead>"
@@ -363,7 +350,7 @@ def process_pos_payment(payload):
             )
         msg += "</tbody>"
         msg += "</table>"
-    if len(errors) > 0:
+    if errors:
         msg += "<h4>Errors</h4>"
         msg += "<table class='table table-bordered'>"
         msg += "<thead><tr><th>Error</th></tr></thead>"
@@ -372,7 +359,7 @@ def process_pos_payment(payload):
             msg += "<tr><td>{0}</td></tr>".format(error)
         msg += "</tbody>"
         msg += "</table>"
-    if len(msg) > 0:
+    if msg != "":
         frappe.msgprint(msg)
 
     return {
@@ -385,10 +372,9 @@ def process_pos_payment(payload):
 
 @frappe.whitelist()
 def get_available_pos_profiles(company, currency):
-    pos_profiles_list = frappe.get_list(
+    return frappe.get_list(
         "POS Profile",
         filters={"disabled": 0, "company": company, "currency": currency},
         page_length=1000,
         pluck="name",
     )
-    return pos_profiles_list

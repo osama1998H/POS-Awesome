@@ -51,8 +51,14 @@ class StatusUpdater(Document):
 					self.status = s[0]
 					break
 
-			if self.status != _status and self.status not in ("Cancelled", "Partially Ordered",
-																"Ordered", "Issued", "Transferred"):
+			if self.status not in (
+				_status,
+				"Cancelled",
+				"Partially Ordered",
+				"Ordered",
+				"Issued",
+				"Transferred",
+			):
 				self.add_comment("Label", _(self.status))
 
 			if update:

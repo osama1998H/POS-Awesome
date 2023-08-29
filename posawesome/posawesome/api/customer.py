@@ -41,9 +41,8 @@ def create_gift_coupon(doc):
 
 
 def validate_referral_code(doc):
-    referral_code = doc.posa_referral_code
     exist = None
-    if referral_code:
+    if referral_code := doc.posa_referral_code:
         exist = frappe.db.exists("Referral Code", referral_code)
         if not exist:
             exist = frappe.db.exists("Referral Code", {"referral_code": referral_code})

@@ -18,7 +18,7 @@ class POSCoupon(Document):
             if self.coupon_type == "Promotional":
                 self.coupon_code = "".join(
                     i for i in self.coupon_name if not i.isdigit()
-                )[0:8].upper()
+                )[:8].upper()
             elif self.coupon_type == "Gift Card":
                 self.coupon_code = frappe.generate_hash()[:10].upper()
 
@@ -47,13 +47,12 @@ class POSCoupon(Document):
         if not self.referral_code:
             frappe.throw(_("Referral Code is required"))
         ref_doc = None
-        ref_code_exist = frappe.db.exists("Referral Code", self.referral_code)
-        if not ref_code_exist:
+        if ref_code_exist := frappe.db.exists("Referral Code", self.referral_code):
+            ref_doc = frappe.get_doc("Referral Code", self.referral_code)
+        else:
             ref_doc = frappe.get_doc(
                 "Referral Code", {"referral_code": self.referral_code}
             )
-        else:
-            ref_doc = frappe.get_doc("Referral Code", self.referral_code)
         if not ref_doc:
             frappe.throw(
                 _("Referral Code {0} is not exists").format(self.referral_code)
@@ -151,8 +150,7 @@ def validate_coupon_code(coupon_code, customer=None, company=None):
 
 
 def update_coupon_code_count(coupon_name, transaction_type):
-    coupon = frappe.get_doc("POS Coupon", coupon_name)
-    if coupon:
+    if coupon := frappe.get_doc("POS Coupon", coupon_name):
         if transaction_type == "used":
 
             if coupon.maximum_use and coupon.used >= coupon.maximum_use:

@@ -60,34 +60,34 @@ def add_loyalty_point(invoice_doc):
 
 def create_sales_order(doc):
     if (
-        doc.posa_pos_opening_shift
-        and doc.pos_profile
-        and doc.is_pos
-        and doc.posa_delivery_date
-        and not doc.update_stock
-        and frappe.get_value("POS Profile", doc.pos_profile, "posa_allow_sales_order")
+        not doc.posa_pos_opening_shift
+        or not doc.pos_profile
+        or not doc.is_pos
+        or not doc.posa_delivery_date
+        or doc.update_stock
+        or not frappe.get_value(
+            "POS Profile", doc.pos_profile, "posa_allow_sales_order"
+        )
     ):
-        sales_order_doc = make_sales_order(doc.name)
-        if sales_order_doc:
-            sales_order_doc.posa_notes = doc.posa_notes
-            sales_order_doc.flags.ignore_permissions = True
-            sales_order_doc.flags.ignore_account_permission = True
-            sales_order_doc.save()
-            sales_order_doc.submit()
-            url = frappe.utils.get_url_to_form(
-                sales_order_doc.doctype, sales_order_doc.name
-            )
-            msgprint = "Sales Order Created at <a href='{0}'>{1}</a>".format(
-                url, sales_order_doc.name
-            )
-            frappe.msgprint(
-                _(msgprint), title="Sales Order Created", indicator="green", alert=True
-            )
-            i = 0
-            for item in sales_order_doc.items:
-                doc.items[i].sales_order = sales_order_doc.name
-                doc.items[i].so_detail = item.name
-                i += 1
+        return
+    if sales_order_doc := make_sales_order(doc.name):
+        sales_order_doc.posa_notes = doc.posa_notes
+        sales_order_doc.flags.ignore_permissions = True
+        sales_order_doc.flags.ignore_account_permission = True
+        sales_order_doc.save()
+        sales_order_doc.submit()
+        url = frappe.utils.get_url_to_form(
+            sales_order_doc.doctype, sales_order_doc.name
+        )
+        msgprint = "Sales Order Created at <a href='{0}'>{1}</a>".format(
+            url, sales_order_doc.name
+        )
+        frappe.msgprint(
+            _(msgprint), title="Sales Order Created", indicator="green", alert=True
+        )
+        for i, item in enumerate(sales_order_doc.items):
+            doc.items[i].sales_order = sales_order_doc.name
+            doc.items[i].so_detail = item.name
 
 
 def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
@@ -173,16 +173,14 @@ def auto_set_delivery_charges(doc):
     if doc.posa_delivery_charges:
         if doc.posa_delivery_charges_rate:
             return
-        else:
-            if len(delivery_charges) > 0:
-                doc.posa_delivery_charges_rate = delivery_charges[0].rate
-    else:
         if len(delivery_charges) > 0:
-            doc.posa_delivery_charges = delivery_charges[0].name
             doc.posa_delivery_charges_rate = delivery_charges[0].rate
-        else:
-            doc.posa_delivery_charges = None
-            doc.posa_delivery_charges_rate = None
+    elif len(delivery_charges) > 0:
+        doc.posa_delivery_charges = delivery_charges[0].name
+        doc.posa_delivery_charges_rate = delivery_charges[0].rate
+    else:
+        doc.posa_delivery_charges = None
+        doc.posa_delivery_charges_rate = None
 
 
 def calc_delivery_charges(doc):
@@ -195,9 +193,8 @@ def calc_delivery_charges(doc):
         old_doc = doc.get_doc_before_save()
         if not doc.posa_delivery_charges and not old_doc.posa_delivery_charges:
             return
-    else:
-        if not doc.posa_delivery_charges:
-            return
+    elif not doc.posa_delivery_charges:
+        return
     if not doc.posa_delivery_charges:
         doc.posa_delivery_charges_rate = 0
 
@@ -207,14 +204,18 @@ def calc_delivery_charges(doc):
             "Delivery Charges", doc.posa_delivery_charges
         )
         doc.posa_delivery_charges_rate = charges_doc.default_rate
-        charges_profile = next(
-            (i for i in charges_doc.profiles if i.pos_profile == doc.pos_profile), None
-        )
-        if charges_profile:
+        if charges_profile := next(
+            (
+                i
+                for i in charges_doc.profiles
+                if i.pos_profile == doc.pos_profile
+            ),
+            None,
+        ):
             doc.posa_delivery_charges_rate = charges_profile.rate
 
     if old_doc and old_doc.posa_delivery_charges:
-        old_charges = next(
+        if old_charges := next(
             (
                 i
                 for i in doc.taxes
@@ -222,8 +223,7 @@ def calc_delivery_charges(doc):
                 and i.description == old_doc.posa_delivery_charges
             ),
             None,
-        )
-        if old_charges:
+        ):
             doc.taxes.remove(old_charges)
             calculate_taxes_and_totals = True
 

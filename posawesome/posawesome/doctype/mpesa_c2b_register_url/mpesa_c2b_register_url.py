@@ -18,10 +18,7 @@ class MpesaC2BRegisterURL(Document):
             if env == "production"
             else mpesa_settings.till_number
         )
-        if env == "sandbox":
-            base_url = sandbox_url
-        else:
-            base_url = live_url
+        base_url = sandbox_url if env == "sandbox" else live_url
         token = get_token(
             app_key=mpesa_settings.consumer_key,
             app_secret=mpesa_settings.get_password("consumer_secret"),
@@ -29,12 +26,12 @@ class MpesaC2BRegisterURL(Document):
         )
         site_url = get_request_site_address(True)
         validation_url = (
-            site_url + "/api/method/posawesome.posawesome.api.m_pesa.validation"
+            f"{site_url}/api/method/posawesome.posawesome.api.m_pesa.validation"
         )
         confirmation_url = (
-            site_url + "/api/method/posawesome.posawesome.api.m_pesa.confirmation"
+            f"{site_url}/api/method/posawesome.posawesome.api.m_pesa.confirmation"
         )
-        register_url = base_url + "/mpesa/c2b/v2/registerurl"
+        register_url = f"{base_url}/mpesa/c2b/v2/registerurl"
 
         payload = {
             "ShortCode": business_shortcode,

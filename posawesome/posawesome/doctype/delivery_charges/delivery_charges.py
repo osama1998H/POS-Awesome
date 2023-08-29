@@ -56,17 +56,16 @@ def get_applicable_delivery_charges(
             )
         )
     for address in address_list:
-        address_charges = frappe.get_cached_value(
+        if address_charges := frappe.get_cached_value(
             "Address", address, "posa_delivery_charges"
-        )
-        if address_charges:
+        ):
             delivery_charges_list.append(address_charges)
 
     delivery_charges_filters = {"disabled": 0, "company": company}
     if delivery_charges:
         delivery_charges_list.append(delivery_charges)
 
-    if len(delivery_charges_list) > 0:
+    if delivery_charges_list:
         delivery_charges_filters["name"] = ["in", delivery_charges_list]
     if restrict:
         delivery_charges_filters["profiles_list"] = ["not in", ["", None]]
@@ -87,14 +86,14 @@ def get_applicable_delivery_charges(
         fields=["*"],
     )
     for charge in delivery_charges_items:
-        profile = next((i for i in delivery_profiels if i.parent == charge.name), None)
-        if profile:
+        if profile := next(
+            (i for i in delivery_profiels if i.parent == charge.name), None
+        ):
             charge.rate = profile.rate
             charges.append(charge)
-        else:
-            if not restrict:
-                if not charge.profiles_list:
-                    charge.rate = charge.default_rate
-                    charges.append(charge)
+        elif not restrict:
+            if not charge.profiles_list:
+                charge.rate = charge.default_rate
+                charges.append(charge)
 
     return charges
