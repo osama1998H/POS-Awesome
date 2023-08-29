@@ -13,13 +13,11 @@ class MpesaPaymentRegister(Document):
 
     def set_missing_values(self):
         self.currency = "KES"
-        self.full_name = ""
-        if self.firstname:
-            self.full_name = self.firstname
+        self.full_name = self.firstname if self.firstname else ""
         if self.middlename:
-            self.full_name += " " + self.middlename
+            self.full_name += f" {self.middlename}"
         if self.lastname:
-            self.full_name += " " + self.lastname
+            self.full_name += f" {self.lastname}"
 
         register_url_list = frappe.get_all(
             "Mpesa C2B Register URL",

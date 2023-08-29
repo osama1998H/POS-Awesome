@@ -34,8 +34,11 @@ from frappe.utils.caching import redis_cache
 
 @frappe.whitelist()
 def get_opening_dialog_data():
-    data = {}
-    data["companys"] = frappe.get_list("Company", limit_page_length=0, order_by="name")
+    data = {
+        "companys": frappe.get_list(
+            "Company", limit_page_length=0, order_by="name"
+        )
+    }
     data["pos_profiles_data"] = frappe.get_list(
         "POS Profile",
         filters={"disabled": 0},
@@ -44,10 +47,7 @@ def get_opening_dialog_data():
         order_by="name",
     )
 
-    pos_profiles_list = []
-    for i in data["pos_profiles_data"]:
-        pos_profiles_list.append(i.name)
-
+    pos_profiles_list = [i.name for i in data["pos_profiles_data"]]
     payment_method_table = (
         "POS Payment Method" if get_version() == 13 else "Sales Invoice Payment"
     )
@@ -86,8 +86,7 @@ def create_opening_voucher(pos_profile, company, balance_details):
     new_pos_opening.set("balance_details", balance_details)
     new_pos_opening.insert(ignore_permissions=True)
 
-    data = {}
-    data["pos_opening_shift"] = new_pos_opening.as_dict()
+    data = {"pos_opening_shift": new_pos_opening.as_dict()}
     update_opening_shift_data(data, new_pos_opening.pos_profile)
     return data
 
@@ -107,10 +106,11 @@ def check_opening_shift(user):
     )
     data = ""
     if len(open_vouchers) > 0:
-        data = {}
-        data["pos_opening_shift"] = frappe.get_doc(
-            "POS Opening Shift", open_vouchers[0]["name"]
-        )
+        data = {
+            "pos_opening_shift": frappe.get_doc(
+                "POS Opening Shift", open_vouchers[0]["name"]
+            )
+        }
         update_opening_shift_data(data, open_vouchers[0]["pos_profile"])
     return data
 
@@ -139,7 +139,7 @@ def get_items(pos_profile, price_list=None, item_group="", search_value=""):
     def _get_items(pos_profile, price_list, item_group, search_value):
         pos_profile = json.loads(pos_profile)
         today = nowdate()
-        data = dict()
+        data = {}
         posa_display_items_in_stock = pos_profile.get("posa_display_items_in_stock")
         search_serial_no = pos_profile.get("posa_search_serial_no")
         search_batch_no = pos_profile.get("posa_search_batch_no")
@@ -295,11 +295,11 @@ def get_items(pos_profile, price_list=None, item_group="", search_value=""):
                         fields=["attribute", "attribute_value"],
                         filters={"parent": item.item_code, "parentfield": "attributes"},
                     )
-                if posa_display_items_in_stock and (
-                    not item_stock_qty or item_stock_qty < 0
+                if (
+                    not posa_display_items_in_stock
+                    or item_stock_qty
+                    and item_stock_qty >= 0
                 ):
-                    pass
-                else:
                     row = {}
                     row.update(item)
                     row.update(
@@ -328,7 +328,7 @@ def get_item_group_condition(pos_profile):
     cond = " and 1=1"
     item_groups = get_item_groups(pos_profile)
     if item_groups:
-        cond = " and item_group in (%s)" % (", ".join(["%s"] * len(item_groups)))
+        cond = f' and item_group in ({", ".join(["%s"] * len(item_groups))})'
 
     return cond % tuple(item_groups)
 
@@ -366,7 +366,7 @@ def get_customer_groups(pos_profile):
         for data in pos_profile.get("customer_groups"):
             customer_groups.extend(
                 [
-                    "%s" % frappe.db.escape(d.get("name"))
+                    f'{frappe.db.escape(d.get("name"))}'
                     for d in get_child_nodes(
                         "Customer Group", data.get("customer_group")
                     )
@@ -391,7 +391,7 @@ def get_customer_group_condition(pos_profile):
     cond = "disabled = 0"
     customer_groups = get_customer_groups(pos_profile)
     if customer_groups:
-        cond = " customer_group in (%s)" % (", ".join(["%s"] * len(customer_groups)))
+        cond = f' customer_group in ({", ".join(["%s"] * len(customer_groups))})'
 
     return cond % tuple(customer_groups)
 
@@ -432,7 +432,7 @@ def get_customer_names(pos_profile):
 
 @frappe.whitelist()
 def get_sales_person_names():
-    sales_persons = frappe.db.sql(
+    return frappe.db.sql(
         """
         SELECT name, sales_person_name
         FROM `tabSales Person`
@@ -441,7 +441,6 @@ def get_sales_person_names():
         """,
         as_dict=1,
     )
-    return sales_persons
 
 
 @frappe.whitelist()
@@ -504,12 +503,11 @@ def submit_invoice(invoice, data):
     invoice_doc.update(invoice)
     if invoice.get("posa_delivery_date"):
         invoice_doc.update_stock = 0
-    mop_cash_list = [
+    if mop_cash_list := [
         i.mode_of_payment
         for i in invoice_doc.payments
         if "cash" in i.mode_of_payment.lower() and i.type == "Cash"
-    ]
-    if len(mop_cash_list) > 0:
+    ]:
         cash_account = get_bank_cash_account(mop_cash_list[0], invoice_doc.company)
     else:
         cash_account = {
@@ -811,10 +809,10 @@ def get_draft_invoices(pos_opening_shift):
         limit_page_length=0,
         order_by="modified desc",
     )
-    data = []
-    for invoice in invoices_list:
-        data.append(frappe.get_cached_doc("Sales Invoice", invoice["name"]))
-    return data
+    return [
+        frappe.get_cached_doc("Sales Invoice", invoice["name"])
+        for invoice in invoices_list
+    ]
 
 
 @frappe.whitelist()
@@ -919,8 +917,9 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None):
     item_code = item.get("item_code")
     batch_no_data = []
     if warehouse and item.get("has_batch_no"):
-        batch_list = get_batch_qty(warehouse=warehouse, item_code=item_code)
-        if batch_list:
+        if batch_list := get_batch_qty(
+            warehouse=warehouse, item_code=item_code
+        ):
             for batch in batch_list:
                 if batch.qty > 0 and batch.batch_no:
                     batch_doc = frappe.get_cached_doc("Batch", batch.batch_no)
@@ -954,7 +953,7 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None):
 
 
 def get_stock_availability(item_code, warehouse):
-    actual_qty = (
+    return (
         frappe.db.get_value(
             "Stock Ledger Entry",
             filters={
@@ -967,7 +966,6 @@ def get_stock_availability(item_code, warehouse):
         )
         or 0.0
     )
-    return actual_qty
 
 
 @frappe.whitelist()
@@ -1009,10 +1007,7 @@ def create_customer(
                 customer.customer_group = customer_group
             else:
                 customer.customer_group = "All Customer Groups"
-            if territory:
-                customer.territory = territory
-            else:
-                customer.territory = "All Territories"
+            customer.territory = territory if territory else "All Territories"
             customer.save()
             return customer
         else:
@@ -1111,11 +1106,12 @@ def set_customer_info(customer, fieldname, value=""):
     if fieldname == "loyalty_program":
         frappe.db.set_value("Customer", customer, "loyalty_program", value)
 
-    contact = (
-        frappe.get_cached_value("Customer", customer, "customer_primary_contact") or ""
-    )
-
-    if contact:
+    if contact := (
+        frappe.get_cached_value(
+            "Customer", customer, "customer_primary_contact"
+        )
+        or ""
+    ):
         contact_doc = frappe.get_doc("Contact", contact)
         if fieldname == "email_id":
             contact_doc.set("email_ids", [{"email_id": value, "is_primary": 1}])
@@ -1168,19 +1164,16 @@ def search_invoices_for_return(invoice_name, company):
     )
     if len(is_returned):
         return data
-    for invoice in invoices_list:
-        data.append(frappe.get_doc("Sales Invoice", invoice["name"]))
+    data.extend(
+        frappe.get_doc("Sales Invoice", invoice["name"])
+        for invoice in invoices_list
+    )
     return data
 
 
 def get_version():
     branch_name = get_app_branch("erpnext")
-    if "12" in branch_name:
-        return 12
-    elif "13" in branch_name:
-        return 13
-    else:
-        return 13
+    return 12 if "12" in branch_name else 13
 
 
 def get_app_branch(app):
@@ -1212,7 +1205,7 @@ def get_offers(profile):
         "valid_from": date,
         "valid_upto": date,
     }
-    data = frappe.db.sql(
+    return frappe.db.sql(
         """
         SELECT *
         FROM `tabPOS Offer`
@@ -1227,7 +1220,6 @@ def get_offers(profile):
         values=values,
         as_dict=1,
     )
-    return data
 
 
 @frappe.whitelist()
@@ -1260,7 +1252,7 @@ def get_customer_addresses(customer):
 @frappe.whitelist()
 def make_address(args):
     args = json.loads(args)
-    address = frappe.get_doc(
+    return frappe.get_doc(
         {
             "doctype": "Address",
             "address_title": args.get("name"),
@@ -1272,12 +1264,13 @@ def make_address(args):
             "country": args.get("country"),
             "address_type": "Shipping",
             "links": [
-                {"link_doctype": args.get("doctype"), "link_name": args.get("customer")}
+                {
+                    "link_doctype": args.get("doctype"),
+                    "link_name": args.get("customer"),
+                }
             ],
         }
     ).insert()
-
-    return address
 
 
 def build_item_cache(item_code):
@@ -1301,7 +1294,7 @@ def build_item_cache(item_code):
         as_list=1,
     )
 
-    disabled_items = set([i.name for i in frappe.db.get_all("Item", {"disabled": 1})])
+    disabled_items = {i.name for i in frappe.db.get_all("Item", {"disabled": 1})}
 
     attribute_value_item_map = frappe._dict({})
     item_attribute_value_map = frappe._dict({})
@@ -1435,8 +1428,7 @@ def get_existing_payment_request(doc, pay):
         "payment_gateway_account": payment_gateway_account,
         "email_to": doc.get("contact_mobile"),
     }
-    pr = frappe.db.exists(args)
-    if pr:
+    if pr := frappe.db.exists(args):
         return frappe.get_doc("Payment Request", pr)
 
 
@@ -1501,11 +1493,9 @@ def make_payment_request(**args):
         pr = frappe.get_doc("Payment Request", existing_payment_request)
     else:
         if args.order_type != "Shopping Cart":
-            existing_payment_request_amount = get_existing_payment_request_amount(
+            if existing_payment_request_amount := get_existing_payment_request_amount(
                 args.dt, args.dn
-            )
-
-            if existing_payment_request_amount:
+            ):
                 grand_total -= existing_payment_request_amount
 
         pr = frappe.new_doc("Payment Request")
@@ -1542,20 +1532,19 @@ def make_payment_request(**args):
         frappe.local.response["type"] = "redirect"
         frappe.local.response["location"] = pr.get_payment_url()
 
-    if args.return_doc:
-        return pr
-
-    return pr.as_dict()
+    return pr if args.return_doc else pr.as_dict()
 
 
 def get_amount(ref_doc, payment_account=None):
     """get amount based on doctype"""
-    grand_total = 0
-    for pay in ref_doc.payments:
-        if pay.type == "Phone" and pay.account == payment_account:
-            grand_total = pay.amount
-            break
-
+    grand_total = next(
+        (
+            pay.amount
+            for pay in ref_doc.payments
+            if pay.type == "Phone" and pay.account == payment_account
+        ),
+        0,
+    )
     if grand_total > 0:
         return grand_total
 
@@ -1567,13 +1556,11 @@ def get_amount(ref_doc, payment_account=None):
 
 @frappe.whitelist()
 def get_pos_coupon(coupon, customer, company):
-    res = check_coupon_code(coupon, customer, company)
-    return res
+    return check_coupon_code(coupon, customer, company)
 
 
 @frappe.whitelist()
 def get_active_gift_coupons(customer, company):
-    coupons = []
     coupons_data = frappe.get_all(
         "POS Coupon",
         filters={
@@ -1584,34 +1571,34 @@ def get_active_gift_coupons(customer, company):
         },
         fields=["coupon_code"],
     )
-    if len(coupons_data):
-        coupons = [i.coupon_code for i in coupons_data]
-    return coupons
+    return [i.coupon_code for i in coupons_data] if len(coupons_data) else []
 
 
 @frappe.whitelist()
 def get_customer_info(customer):
     customer = frappe.get_doc("Customer", customer)
 
-    res = {"loyalty_points": None, "conversion_factor": None}
-
-    res["email_id"] = customer.email_id
-    res["mobile_no"] = customer.mobile_no
-    res["image"] = customer.image
-    res["loyalty_program"] = customer.loyalty_program
-    res["customer_price_list"] = customer.default_price_list
-    res["customer_group"] = customer.customer_group
-    res["customer_type"] = customer.customer_type
-    res["territory"] = customer.territory
-    res["birthday"] = customer.posa_birthday
-    res["gender"] = customer.gender
-    res["tax_id"] = customer.tax_id
-    res["posa_discount"] = customer.posa_discount
-    res["name"] = customer.name
-    res["customer_name"] = customer.customer_name
-    res["customer_group_price_list"] = frappe.get_value(
-        "Customer Group", customer.customer_group, "default_price_list"
-    )
+    res = {
+        "loyalty_points": None,
+        "conversion_factor": None,
+        "email_id": customer.email_id,
+        "mobile_no": customer.mobile_no,
+        "image": customer.image,
+        "loyalty_program": customer.loyalty_program,
+        "customer_price_list": customer.default_price_list,
+        "customer_group": customer.customer_group,
+        "customer_type": customer.customer_type,
+        "territory": customer.territory,
+        "birthday": customer.posa_birthday,
+        "gender": customer.gender,
+        "tax_id": customer.tax_id,
+        "posa_discount": customer.posa_discount,
+        "name": customer.name,
+        "customer_name": customer.customer_name,
+        "customer_group_price_list": frappe.get_value(
+            "Customer Group", customer.customer_group, "default_price_list"
+        ),
+    }
 
     if customer.loyalty_program:
         lp_details = get_loyalty_program_details_with_points(
@@ -1642,7 +1629,7 @@ def get_applicable_delivery_charges(
 def auto_create_items():
     # create 20000 items
     for i in range(20000):
-        item_code = "AUTO-ITEM-{}".format(i)
+        item_code = f"AUTO-ITEM-{i}"
         item = frappe.get_doc(
             {
                 "doctype": "Item",
@@ -1669,34 +1656,35 @@ def auto_create_items():
                 "standard_rate": 100 + i,
             }
         )
-        print("Creating Item: {}".format(item_code))
+        print(f"Creating Item: {item_code}")
         item.insert(ignore_permissions=True)
         frappe.db.commit()
 
 
 @frappe.whitelist()
 def search_serial_or_batch_or_barcode_number(search_value, search_serial_no):
-    # search barcode no
-    barcode_data = frappe.db.get_value(
+    if barcode_data := frappe.db.get_value(
         "Item Barcode",
         {"barcode": search_value},
         ["barcode", "parent as item_code"],
         as_dict=True,
-    )
-    if barcode_data:
+    ):
         return barcode_data
     # search serial no
     if search_serial_no:
-        serial_no_data = frappe.db.get_value(
-            "Serial No", search_value, ["name as serial_no", "item_code"], as_dict=True
-        )
-        if serial_no_data:
+        if serial_no_data := frappe.db.get_value(
+            "Serial No",
+            search_value,
+            ["name as serial_no", "item_code"],
+            as_dict=True,
+        ):
             return serial_no_data
-    # search batch no
-    batch_no_data = frappe.db.get_value(
-        "Batch", search_value, ["name as batch_no", "item as item_code"], as_dict=True
-    )
-    if batch_no_data:
+    if batch_no_data := frappe.db.get_value(
+        "Batch",
+        search_value,
+        ["name as batch_no", "item as item_code"],
+        as_dict=True,
+    ):
         return batch_no_data
     return {}
 
@@ -1705,5 +1693,5 @@ def get_seearch_items_conditions(item_code, serial_no, batch_no, barcode):
     if serial_no or batch_no or barcode:
         return " and name = {0}".format(frappe.db.escape(item_code))
     return """ and (name like {item_code} or item_name like {item_code})""".format(
-        item_code=frappe.db.escape("%" + item_code + "%")
+        item_code=frappe.db.escape(f"%{item_code}%")
     )

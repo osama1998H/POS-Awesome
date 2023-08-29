@@ -83,7 +83,7 @@ def get_mpesa_draft_payments(
     if payment_methods_list:
         filters["mode_of_payment"] = ["in", json.loads(payment_methods_list)]
 
-    payments = frappe.get_all(
+    return frappe.get_all(
         "Mpesa Payment Register",
         filters=filters,
         fields=[
@@ -99,7 +99,6 @@ def get_mpesa_draft_payments(
         ],
         order_by="posting_date desc",
     )
-    return payments
 
 
 @frappe.whitelist()
